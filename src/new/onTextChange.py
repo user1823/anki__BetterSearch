@@ -58,6 +58,7 @@ def get_filter_dialog_output(
     sort_vals=True,
     multi_selection_enabled=True,
     context="",
+    tag_completer=None,
     dict_for_dialog=False,
 ):
     if in_full_anki_with_gui:
@@ -79,6 +80,7 @@ def get_filter_dialog_output(
             sort_vals=sort_vals,
             multi_selection_enabled=multi_selection_enabled,
             context=context,
+            tag_completer=tag_completer,
         )
         if d.exec():
             d.dict_for_dialog = dict_for_dialog
@@ -163,7 +165,7 @@ def filter_dialog_and_overrides(
 def note_filter_helper(parent, col, remaining_sentence, prefixed_with_minus):
     infotext = f"""
 <span>
-In a first step select the note type to search. After this you'll see a dialog to narrow 
+In a first step select the note type to search. After this you'll see a dialog to narrow
 by {remaining_sentence}
 </span>
 """
@@ -255,7 +257,7 @@ card template/type/name you want to search.
 
     if iscloze:
         msg = """
-You selected a cloze note type. To match only c2 clozes type you would have to 
+You selected a cloze note type. To match only c2 clozes type you would have to
 add&nbsp;&nbsp;card:2&nbsp;&nbsp;
 """
         tooltip(msg, parent=parent)  # default is period=3000
@@ -271,8 +273,8 @@ def note__field(parent, col, prefixed_with_minus):
 
     infotext = """
 <span>
-After having selected the note type to search now select the field name you want 
-to search. After closing this dialog the text inserted will be "fieldname:**" 
+After having selected the note type to search now select the field name you want
+to search. After closing this dialog the text inserted will be "fieldname:**"
 which doesn't limit your search yet. You must <b>adjust</b> this search and
 add some text to limit to a certain term.
 <span>
@@ -488,12 +490,12 @@ def onSearchEditTextChange(
     parent, move_dialog_in_browser, include_filtered_in_deck, input_text, cursorpos, from_button=False, test_input=False
 ):
     # parent: Browser, filtered_deck.FilteredDeckConfigDialog
-    global testinput 
+    global testinput
     testinput = test_input
 
     col = parent.col
     TriggerSearchAfter = False
-    
+
     if cursorpos is None:
         before = input_text
         after = ""
@@ -599,7 +601,7 @@ def onSearchEditTextChange(
 
         def saved_searches_dict():
             d = {}
-            for key, val in col.get_config("savedFilters", {}).items():                
+            for key, val in col.get_config("savedFilters", {}).items():
                 d[f"{key} ['''{val}''']"] = val
             print(d)
             return d
@@ -726,10 +728,16 @@ which doesn't limit your search. You must put your search term between the "**".
     )
     if tag_search:
         prefixed_with_minus = True if minus_precedes_search_operator(before, "tag:") else False
+
+        def _tag_completer(search_string):
+            matches = list(col._backend.complete_tag(input=search_string, match_limit=750))
+            matches.append("none")
+            return matches
+
         vals = {
             "remove_from_end_of_before": -5 if prefixed_with_minus else -4,
             "dict_for_dialog": False,
-            "values_for_filter_dialog": tags(col),
+            "values_for_filter_dialog": _tag_completer(""),
             "surround_with_quotes": False,
             "infotext": False,
             "windowtitle": "Anki: Select tag to search",
@@ -737,7 +745,8 @@ which doesn't limit your search. You must put your search term between the "**".
             "check_prepend_minus_button": prefixed_with_minus,
             "show_star": False,  # since at least 2.1.50 searching for tag:aa also matches tag:aa:bb etc.
             "check_star": False,
-            "sort_vals": True,
+            "sort_vals": False,
+            "tag_completer": _tag_completer,
             "multi_selection_enabled": True,
             "context": "tag",
             "operator": "tag:",
@@ -884,6 +893,7 @@ which doesn't limit your search. You must put your search term between the "**".
         sort_vals=vals["sort_vals"],
         multi_selection_enabled=vals.get("multi_selection_enabled"),
         context=vals.get("context"),
+        tag_completer=vals.get("tag_completer"),
         dict_for_dialog=vals["dict_for_dialog"]
     )
     if not d:
@@ -922,7 +932,7 @@ which doesn't limit your search. You must put your search term between the "**".
             if is_exclusion:  # doesn't really make sense here
                 mysearch = f'''-("card:{escape_metachars(mycard)}" "note:{escape_metachars(mynote)}")'''
             else:
-                mysearch = f'''"card:{escape_metachars(mycard)}" "note:{escape_metachars(mynote)}"'''          
+                mysearch = f'''"card:{escape_metachars(mycard)}" "note:{escape_metachars(mynote)}"'''
             new_text = befmod + mysearch + after
             new_pos = len(befmod + mysearch)
             return new_text, new_pos, TriggerSearchAfter
@@ -932,7 +942,7 @@ which doesn't limit your search. You must put your search term between the "**".
             if is_exclusion: # - doesn't really make sense here
                 mysearch = f'''-("note:{escape_metachars(mynote)}" "{escape_metachars(field)}:**")'''
             else:
-                mysearch = f'''"note:{escape_metachars(mynote)}" "{escape_metachars(field)}:**"'''           
+                mysearch = f'''"note:{escape_metachars(mynote)}" "{escape_metachars(field)}:**"'''
             new_text = befmod + mysearch + after
             cursor_adj = 3 if is_exclusion else 2
             new_pos = len(befmod + mysearch) - cursor_adj  # -2/-3 I need to go back 2/3 for *"
@@ -987,7 +997,7 @@ which doesn't limit your search. You must put your search term between the "**".
                         if c in element:
                             vals["surround_with_quotes"] = True
                             break
-        
+
         # print(f"sel_list is --{sel_list}--")
         ############ maybe add '*' to match other deeper nested hierarchical tags, also handle tag/deck multiple matches
         for idx, member in enumerate(sel_list):
@@ -1048,7 +1058,7 @@ which doesn't limit your search. You must put your search term between the "**".
                 merged += f'{maybe_minus}{e}{connector}'
             else:
                 merged += f'{maybe_minus}{vals["operator"]}{e}{connector}'
-        if not is_exclusion:    
+        if not is_exclusion:
             merged = merged[:-4]   # remove final ' OR '
             if len(sel_list) > 1:
                 merged += ")"
@@ -1076,5 +1086,3 @@ which doesn't limit your search. You must put your search term between the "**".
                 move_left = 1
             newpos -= move_left  # move cursor between **
         return new_text, newpos, TriggerSearchAfter
-
-

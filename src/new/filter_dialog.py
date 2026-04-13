@@ -1,7 +1,7 @@
 """
 Original work Copyright (c): 2018  Rene Schallner
 Modified work Copyright (c): 2019- ijgnd
-    
+
 This file (filter_dialog.py) is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
@@ -17,14 +17,14 @@ along with this file.  If not, see <http://www.gnu.org/licenses/>.
 
 
 extracted from https://github.com/renerocksai/sublimeless_zk/tree/6738375c0e371f0c2fde0aa9e539242cfd2b4777/src
-mainly from fuzzypanel.py (both Classes) and utils.py (the helper functions from the 
+mainly from fuzzypanel.py (both Classes) and utils.py (the helper functions from the
 bottom of this file)
 
 
-This is a pyqt dialog that 
+This is a pyqt dialog that
 - takes a list or dict
 - shows the listitems or dictkeys in a QListWidget that you can filter
-- returns 
+- returns
    - when the input is a list: a list of selected
    - when the input is a dict: only one value
    - this unexpected behavior occurs because originally I always returned just one value
@@ -37,10 +37,10 @@ use the class FilterDialog like this:
         print(d.sel_keys_list)
         print(d.sel_value_from_dict)  # if input was a dict
 
-syntax for the default search method: 
-- strings (separated by space) can be in any order, 
-- ! to exclude a string, 
-- " to search for space (e.g. "the wind"), 
+syntax for the default search method:
+- strings (separated by space) can be in any order,
+- ! to exclude a string,
+- " to search for space (e.g. "the wind"),
 - ^ to indicate that the line must start with this string (e.g. _wind won't match some wind)
 
 """
@@ -119,6 +119,7 @@ class FilterDialog(QDialog):
         sort_vals=True,
         multi_selection_enabled=True,
         context="",
+        tag_completer=None,
     ):
         super().__init__(parent)
         aqt.mw.garbage_collect_on_dialog_finish(self)
@@ -137,7 +138,7 @@ class FilterDialog(QDialog):
             #     parent_screen = self.parent.windowHandle().screen()
             #     if self.windowHandle():
             #         self.windowHandle().setScreen(parent_screen)
-                 
+
         self.max_items = gc(["filter dialog", "filter dialog: lines shown"], 500) if max_items is None else max_items
         self.adjustposition = adjPos
         self.show_star = show_star
@@ -151,6 +152,7 @@ class FilterDialog(QDialog):
         self.context = context  # windows size, restore last input
         self.multi_selection_enabled = multi_selection_enabled
         self.tooltip_after_exit_for_parent = ""
+        self.tag_completer = tag_completer
         self.setObjectName("FilterDialog")
         if windowtitle:
             self.setWindowTitle(windowtitle)
@@ -395,9 +397,16 @@ class FilterDialog(QDialog):
             return
         if not search_string:
             search_string = ""
-        self.matched_items_in_list_widget = process_search_string_withStart(
-            search_string, self.keys, self.endswith_sign, self.exclude_sign, self.startswith_sign
-        )
+        # If the backend tag completer is provided, refresh the candidate list on
+        # every keystroke using the actual search string, so that the backend's
+        # priority ordering (prefix matches first) is applied.
+        if self.tag_completer is not None:
+            self.keys = self.tag_completer(search_string)
+            self.matched_items_in_list_widget = list(self.keys)
+        else:
+            self.matched_items_in_list_widget = process_search_string_withStart(
+                search_string, self.keys, self.endswith_sign, self.exclude_sign, self.startswith_sign
+            )
         if search_string in self.matched_items_in_list_widget:
             self.matched_items_in_list_widget.insert(
                 0, self.matched_items_in_list_widget.pop(self.matched_items_in_list_widget.index(search_string))
